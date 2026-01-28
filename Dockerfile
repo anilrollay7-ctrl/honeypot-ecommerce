@@ -61,29 +61,24 @@ RUN mkdir -p static && cp -r frontend/dist/* static/
 # CREATE STARTUP SCRIPT
 # ========================================
 RUN echo '#!/bin/bash\n\
+set -x\n\
 echo "==============================================="\n\
-echo "🍯 Starting Unified Honeypot E-commerce System"\n\
+echo "🍯 Starting Honeypot E-commerce System"\n\
 echo "==============================================="\n\
+echo "Python version: $(python3 --version)"\n\
+echo "Working directory: $(pwd)"\n\
+echo "Files in /app: $(ls -la /app)"\n\
+echo "PORT env: ${PORT}"\n\
+echo "MONGODB_URI env: ${MONGODB_URI}"\n\
 echo ""\n\
-echo "🔧 Starting Cowrie SSH/Telnet Honeypot..."\n\
-if [ -f /cowrie/bin/cowrie ]; then\n\
-  cd /cowrie && cowrie-env/bin/python bin/cowrie start || echo "⚠️  Cowrie failed to start"\n\
-  sleep 2\n\
-  echo "✅ Cowrie started on port 2222 (SSH) and 2223 (Telnet)"\n\
-else\n\
-  echo "⚠️  Cowrie not found, skipping honeypot"\n\
-fi\n\
-echo ""\n\
-echo "🛒 Starting E-commerce Application (Flask + React)..."\n\
-cd /app && python3 app.py\n\
+echo "🛒 Starting Flask Application..."\n\
+cd /app\n\
+exec python3 -u app.py 2>&1\n\
 ' > /start.sh && chmod +x /start.sh
 
 # ========================================
-# EXPOSE PORTS
+# EXPOSE PORTS  
 # ========================================
-# Port 2222: SSH Honeypot (Cowrie)
-# Port 2223: Telnet Honeypot (Cowrie)
-# Port 5000: E-commerce Web Application (Flask + React)
 EXPOSE 2222 2223 5000
 
 # ========================================
