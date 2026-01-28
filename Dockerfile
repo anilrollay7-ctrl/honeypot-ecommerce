@@ -46,9 +46,12 @@ RUN pip3 install --no-cache-dir \
     python-dotenv==1.0.0
 
 # Copy and build React frontend
-COPY frontend/ ./frontend/
+COPY frontend/package*.json ./frontend/
 WORKDIR /app/frontend
-RUN npm install --legacy-peer-deps && npm run build
+RUN npm ci --legacy-peer-deps
+
+COPY frontend/ ./
+RUN npm run build
 
 # Move React build to Flask static folder
 WORKDIR /app
