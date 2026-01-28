@@ -61,20 +61,18 @@ RUN mkdir -p static && cp -r frontend/dist/* static/
 # CREATE STARTUP SCRIPT
 # ========================================
 RUN echo '#!/bin/bash\n\
-set -e\n\
 echo "==============================================="\n\
 echo "🍯 Starting Unified Honeypot E-commerce System"\n\
 echo "==============================================="\n\
 echo ""\n\
 echo "🔧 Starting Cowrie SSH/Telnet Honeypot..."\n\
-cd /cowrie && cowrie-env/bin/python bin/cowrie start\n\
-sleep 3\n\
-echo "✅ Cowrie started on port 2222 (SSH) and 2223 (Telnet)"\n\
-echo ""\n\
-echo "📊 Starting MongoDB Attack Logger..."\n\
-cd /app && python3 cowrie_to_mongodb.py > /var/log/cowrie-logger.log 2>&1 &\n\
-sleep 2\n\
-echo "✅ MongoDB logger started"\n\
+if [ -f /cowrie/bin/cowrie ]; then\n\
+  cd /cowrie && cowrie-env/bin/python bin/cowrie start || echo "⚠️  Cowrie failed to start"\n\
+  sleep 2\n\
+  echo "✅ Cowrie started on port 2222 (SSH) and 2223 (Telnet)"\n\
+else\n\
+  echo "⚠️  Cowrie not found, skipping honeypot"\n\
+fi\n\
 echo ""\n\
 echo "🛒 Starting E-commerce Application (Flask + React)..."\n\
 cd /app && python3 app.py\n\
