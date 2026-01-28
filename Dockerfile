@@ -51,7 +51,7 @@ WORKDIR /app/frontend
 RUN npm ci --legacy-peer-deps
 
 COPY frontend/ ./
-RUN npm run build
+RUN chmod +x node_modules/.bin/* && npm run build
 
 # Move React build to Flask static folder
 WORKDIR /app
