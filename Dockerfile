@@ -48,7 +48,7 @@ RUN pip3 install --no-cache-dir \
 # Copy and build React frontend
 COPY frontend/ ./frontend/
 WORKDIR /app/frontend
-RUN npm install && npm run build
+RUN npm install && npx vite build
 
 # Move React build to Flask static folder
 WORKDIR /app
