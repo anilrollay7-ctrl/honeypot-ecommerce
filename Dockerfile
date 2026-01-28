@@ -32,7 +32,7 @@ RUN git clone https://github.com/cowrie/cowrie.git . && \
 WORKDIR /app
 
 # Copy Python backend files
-COPY app.py database.py ecommerce_api.py security_logger.py config.py ./
+COPY app.py database.py ecommerce_api.py security_logger.py config.py advanced_security.py ./
 COPY templates/ ./templates/
 COPY cowrie_to_mongodb.py ./
 
