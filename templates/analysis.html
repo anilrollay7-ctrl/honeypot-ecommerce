@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results - Honeypot Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Honeypot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/analysis" class="nav-item active">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Analysis</span>
+                </a>
+                <a href="/logs" class="nav-item">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Security Logs</span>
+                </a>
+                <a href="/realtime" class="nav-item">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Real-time Feed</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>Analysis Active</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h1>Threat Analysis & Reports</h1>
+                    <p>Comprehensive attack analysis and threat intelligence</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn-primary" onclick="generateReport()">
+                        <i class="fas fa-file-pdf"></i> Generate Report
+                    </button>
+                    <div class="refresh-btn" onclick="refreshAnalysis()">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Threat Summary Cards -->
+            <div class="stats-grid">
+                <div class="stat-card gradient-red">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="threat-level">MEDIUM</h3>
+                        <p>Current Threat Level</p>
+                        <span class="stat-change" id="threat-change">Based on last 24h</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-purple">
+                    <div class="stat-icon">
+                        <i class="fas fa-virus"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="malware-count">0</h3>
+                        <p>Malware Downloads</p>
+                        <span class="stat-change">Total detected</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-blue">
+                    <div class="stat-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="unique-countries">0</h3>
+                        <p>Attack Origins</p>
+                        <span class="stat-change">Countries detected</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-green">
+                    <div class="stat-icon">
+                        <i class="fas fa-shield-virus"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="blocked-attacks">0</h3>
+                        <p>Attacks Logged</p>
+                        <span class="stat-change">All honeypots</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-row">
+                <div class="chart-card">
+                    <h3><i class="fas fa-clock"></i> Attack Pattern by Hour</h3>
+                    <canvas id="hourlyChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3><i class="fas fa-calendar"></i> Daily Distribution</h3>
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Command Analysis -->
+            <div class="charts-row">
+                <div class="chart-card">
+                    <h3><i class="fas fa-layer-group"></i> Command Categories</h3>
+                    <canvas id="categoriesChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3><i class="fas fa-network-wired"></i> Protocol Distribution</h3>
+                    <canvas id="protocolChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Credential Analysis -->
+            <div class="table-card full-width">
+                <h3><i class="fas fa-key"></i> Top Credential Combinations</h3>
+                <div class="table-responsive">
+                    <table id="credentials-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Username</th>
+                                <th>Password</th>
+                                <th>Attempts</th>
+                                <th>Frequency</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Dangerous Commands -->
+            <div class="table-card full-width">
+                <h3><i class="fas fa-exclamation-circle"></i> Dangerous Commands Detected</h3>
+                <div class="table-responsive">
+                    <table id="dangerous-commands-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source IP</th>
+                                <th>Command</th>
+                                <th>Severity</th>
+                                <th>Session</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Malicious IPs -->
+            <div class="table-card full-width">
+                <h3><i class="fas fa-ban"></i> Malicious IP Addresses (>10 attempts)</h3>
+                <div class="table-responsive">
+                    <table id="malicious-ips-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>IP Address</th>
+                                <th>Attempts</th>
+                                <th>First Seen</th>
+                                <th>Last Seen</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/analysis.js') }}"></script>
+</body>
+</html>

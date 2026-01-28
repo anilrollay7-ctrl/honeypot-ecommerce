@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honeypot Dashboard - Cowrie SSH/Telnet Attack Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .honeypot-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .honeypot-section h2 {
+            color: #fff;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .attack-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .attack-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+        
+        .attack-card h3 {
+            color: #4ecca3;
+            font-size: 2rem;
+            margin: 0;
+        }
+        
+        .attack-card p {
+            color: #aaa;
+            margin: 0.5rem 0 0 0;
+        }
+        
+        .attack-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .attack-table th {
+            background: rgba(102, 126, 234, 0.2);
+            color: #fff;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .attack-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: #ccc;
+        }
+        
+        .attack-table tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .severity-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .severity-critical {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+        
+        .severity-high {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+        
+        .severity-medium {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+        
+        .severity-low {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+        
+        .simulate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .simulate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Honeypot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/" class="nav-item active">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/realtime" class="nav-item">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Real-time Feed</span>
+                </a>
+                <a href="/analysis" class="nav-item">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Threat Analysis</span>
+                </a>
+                <a href="/logs" class="nav-item">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Security Logs</span>
+                </a>
+                <a href="http://localhost:3000" class="nav-item" target="_blank">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>E-Commerce Demo</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>System Active</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h1>Cowrie Honeypot Dashboard</h1>
+                    <p>Real-time SSH/Telnet attack monitoring & analysis</p>
+                </div>
+                <div class="header-right">
+                    <button class="simulate-btn" onclick="simulateAttack()">
+                        <i class="fas fa-bolt"></i> Simulate Attack
+                    </button>
+                    <div class="refresh-btn" onclick="refreshDashboard()">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <div class="time-display" id="current-time"></div>
+                </div>
+            </header>
+
+            <!-- Honeypot Attack Statistics -->
+            <div class="honeypot-section">
+                <h2><i class="fas fa-bomb"></i> Brute Force Attacks</h2>
+                <div class="attack-grid">
+                    <div class="attack-card">
+                        <h3 id="brute-force-total">0</h3>
+                        <p>Total Attacks</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="brute-force-success">0</h3>
+                        <p>Successful Breaches</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="brute-force-attackers">0</h3>
+                        <p>Unique Attackers</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="brute-force-avg">0</h3>
+                        <p>Avg Attempts/Attack</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="honeypot-section">
+                <h2><i class="fas fa-terminal"></i> Shell Interactions</h2>
+                <div class="attack-grid">
+                    <div class="attack-card">
+                        <h3 id="shell-sessions">0</h3>
+                        <p>Total Sessions</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="shell-commands">0</h3>
+                        <p>Commands Executed</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="shell-duration">0s</h3>
+                        <p>Avg Duration</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="shell-files">0</h3>
+                        <p>Files Accessed</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="honeypot-section">
+                <h2><i class="fas fa-virus"></i> Malware Downloads</h2>
+                <div class="attack-grid">
+                    <div class="attack-card">
+                        <h3 id="malware-total">0</h3>
+                        <p>Total Downloads</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="malware-unique">0</h3>
+                        <p>Unique Malware</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="malware-size">0 MB</h3>
+                        <p>Total Size</p>
+                    </div>
+                    <div class="attack-card">
+                        <h3 id="malware-analyzed">0</h3>
+                        <p>Analyzed Samples</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Attacks Table -->
+            <div class="honeypot-section">
+                <h2><i class="fas fa-history"></i> Recent Attack Activities</h2>
+                <table class="attack-table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Source IP</th>
+                            <th>Details</th>
+                            <th>Severity</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-attacks-table">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 2rem;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading attacks...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Top Lists -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+                <div class="honeypot-section">
+                    <h2><i class="fas fa-user-secret"></i> Top Attackers</h2>
+                    <table class="attack-table">
+                        <thead>
+                            <tr>
+                                <th>IP Address</th>
+                                <th>Attacks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-attackers-table"></tbody>
+                    </table>
+                </div>
+
+                <div class="honeypot-section">
+                    <h2><i class="fas fa-user"></i> Top Usernames</h2>
+                    <table class="attack-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Attempts</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-usernames-table"></tbody>
+                    </table>
+                </div>
+
+                <div class="honeypot-section">
+                    <h2><i class="fas fa-key"></i> Top Passwords</h2>
+                    <table class="attack-table">
+                        <thead>
+                            <tr>
+                                <th>Password</th>
+                                <th>Attempts</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-passwords-table"></tbody>
+                    </table>
+                </div>
+
+                <div class="honeypot-section">
+                    <h2><i class="fas fa-terminal"></i> Top Commands</h2>
+                    <table class="attack-table">
+                        <thead>
+                            <tr>
+                                <th>Command</th>
+                                <th>Executions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-commands-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Load dashboard data
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('/api/honeypot/dashboard-stats');
+                const data = await response.json();
+
+                // Brute Force Stats
+                const bf = data.brute_force || {};
+                document.getElementById('brute-force-total').textContent = bf.total_attacks || 0;
+                document.getElementById('brute-force-success').textContent = bf.successful_attacks || 0;
+                document.getElementById('brute-force-attackers').textContent = bf.unique_attackers || 0;
+                document.getElementById('brute-force-avg').textContent = bf.avg_attempts || 0;
+
+                // Shell Interaction Stats
+                const shell = data.shell_interactions || {};
+                document.getElementById('shell-sessions').textContent = shell.total_sessions || 0;
+                document.getElementById('shell-commands').textContent = shell.total_commands || 0;
+                document.getElementById('shell-duration').textContent = Math.round(shell.avg_duration || 0) + 's';
+                document.getElementById('shell-files').textContent = shell.files_accessed || 0;
+
+                // Malware Stats
+                const malware = data.malware || {};
+                document.getElementById('malware-total').textContent = malware.total_downloads || 0;
+                document.getElementById('malware-unique').textContent = malware.unique_malware || 0;
+                const sizeMB = ((malware.total_size || 0) / 1024 / 1024).toFixed(2);
+                document.getElementById('malware-size').textContent = sizeMB + ' MB';
+                document.getElementById('malware-analyzed').textContent = malware.total_downloads || 0;
+
+                // Recent Attacks
+                const attacks = data.recent_attacks || [];
+                const tbody = document.getElementById('recent-attacks-table');
+                tbody.innerHTML = attacks.map(attack => `
+                    <tr>
+                        <td><strong>${attack.type}</strong></td>
+                        <td><code>${attack.src_ip}</code></td>
+                        <td>${attack.details}</td>
+                        <td><span class="severity-badge severity-${attack.severity}">${attack.severity.toUpperCase()}</span></td>
+                        <td>${new Date(attack.timestamp).toLocaleString()}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5" style="text-align: center;">No recent attacks</td></tr>';
+
+                // Top Attackers
+                const topAttackers = data.top_attackers || [];
+                document.getElementById('top-attackers-table').innerHTML = topAttackers.map(item => `
+                    <tr>
+                        <td><code>${item.ip}</code></td>
+                        <td><strong>${item.count}</strong></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="2" style="text-align: center;">No data</td></tr>';
+
+                // Top Usernames
+                const topUsernames = data.top_usernames || [];
+                document.getElementById('top-usernames-table').innerHTML = topUsernames.map(item => `
+                    <tr>
+                        <td><code>${item.username}</code></td>
+                        <td><strong>${item.count}</strong></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="2" style="text-align: center;">No data</td></tr>';
+
+                // Top Passwords
+                const topPasswords = data.top_passwords || [];
+                document.getElementById('top-passwords-table').innerHTML = topPasswords.map(item => `
+                    <tr>
+                        <td><code>${item.password}</code></td>
+                        <td><strong>${item.count}</strong></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="2" style="text-align: center;">No data</td></tr>';
+
+                // Top Commands
+                const topCommands = data.top_commands || [];
+                document.getElementById('top-commands-table').innerHTML = topCommands.map(item => `
+                    <tr>
+                        <td><code>${item.command.substring(0, 50)}${item.command.length > 50 ? '...' : ''}</code></td>
+                        <td><strong>${item.count}</strong></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="2" style="text-align: center;">No data</td></tr>';
+
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+            }
+        }
+
+        // Simulate attack
+        async function simulateAttack() {
+            try {
+                const response = await fetch('/api/honeypot/simulate-attack', { method: 'POST' });
+                if (response.ok) {
+                    alert('✅ Attack wave simulated successfully! Dashboard will refresh...');
+                    setTimeout(() => loadDashboardData(), 1000);
+                } else {
+                    alert('❌ Failed to simulate attack');
+                }
+            } catch (error) {
+                console.error('Error simulating attack:', error);
+            }
+        }
+
+        // Refresh dashboard
+        function refreshDashboard() {
+            loadDashboardData();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboardData, 30000);
+
+        // Initial load
+        loadDashboardData();
+    </script>
+</body>
+</html>

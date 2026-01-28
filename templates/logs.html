@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Logs - Honeypot Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .log-entry {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+        }
+        .log-entry.severity-critical { border-left: 4px solid #ef4444; }
+        .log-entry.severity-high { border-left: 4px solid #f59e0b; }
+        .log-entry.severity-medium { border-left: 4px solid #3b82f6; }
+        .log-entry.severity-low { border-left: 4px solid #10b981; }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .log-timestamp {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+        .log-severity {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .log-content {
+            background: var(--dark-bg);
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .filter-bar select, .filter-bar input {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Honeypot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/analysis" class="nav-item">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Analysis</span>
+                </a>
+                <a href="/logs" class="nav-item active">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Security Logs</span>
+                </a>
+                <a href="/realtime" class="nav-item">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Real-time Feed</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>Logging Active</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h1>Security Logs Viewer</h1>
+                    <p>Real-time honeypot security event logs in JSON format</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn-primary" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Export Logs
+                    </button>
+                    <div class="refresh-btn" onclick="loadLogs()">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <select id="log-type-filter" onchange="loadLogs()">
+                    <option value="all">All Events</option>
+                    <option value="session">Sessions</option>
+                    <option value="auth">Authentication</option>
+                    <option value="command">Commands</option>
+                    <option value="download">Downloads</option>
+                    <option value="threat">Threats</option>
+                </select>
+                <select id="severity-filter" onchange="filterBySeverity()">
+                    <option value="all">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <input type="text" id="search-logs" placeholder="Search logs..." oninput="searchLogs()">
+            </div>
+
+            <!-- Logs Container -->
+            <div id="logs-container"></div>
+
+            <!-- Load More -->
+            <div style="text-align: center; padding: 2rem;">
+                <button class="btn-secondary" onclick="loadMoreLogs()">
+                    <i class="fas fa-chevron-down"></i> Load More
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allLogs = [];
+        let filteredLogs = [];
+        let displayCount = 50;
+
+        async function loadLogs() {
+            const logType = document.getElementById('log-type-filter').value;
+            
+            try {
+                const response = await fetch(`/api/logs/security?type=${logType}&limit=500`);
+                allLogs = await response.json();
+                filteredLogs = allLogs;
+                displayLogs();
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
+        }
+
+        function displayLogs() {
+            const container = document.getElementById('logs-container');
+            const logsToShow = filteredLogs.slice(0, displayCount);
+            
+            container.innerHTML = logsToShow.map(log => {
+                const severityClass = `severity-${log.severity || 'low'}`;
+                const severityColor = {
+                    'critical': '#ef4444',
+                    'high': '#f59e0b',
+                    'medium': '#3b82f6',
+                    'low': '#10b981'
+                }[log.severity] || '#10b981';
+                
+                return `
+                    <div class="log-entry ${severityClass}">
+                        <div class="log-header">
+                            <span class="log-timestamp">
+                                <i class="fas fa-clock"></i> ${new Date(log.timestamp).toLocaleString()}
+                            </span>
+                            <span class="badge" style="background-color: ${severityColor}20; color: ${severityColor};">
+                                ${log.severity?.toUpperCase() || 'LOW'}
+                            </span>
+                        </div>
+                        <div class="log-content">
+                            <pre>${JSON.stringify(log, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterBySeverity() {
+            const severity = document.getElementById('severity-filter').value;
+            
+            if (severity === 'all') {
+                filteredLogs = allLogs;
+            } else {
+                filteredLogs = allLogs.filter(log => log.severity === severity);
+            }
+            
+            displayCount = 50;
+            displayLogs();
+        }
+
+        function searchLogs() {
+            const query = document.getElementById('search-logs').value.toLowerCase();
+            
+            if (!query) {
+                filteredLogs = allLogs;
+            } else {
+                filteredLogs = allLogs.filter(log => 
+                    JSON.stringify(log).toLowerCase().includes(query)
+                );
+            }
+            
+            displayCount = 50;
+            displayLogs();
+        }
+
+        function loadMoreLogs() {
+            displayCount += 50;
+            displayLogs();
+        }
+
+        function exportLogs() {
+            const dataStr = JSON.stringify(filteredLogs, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `security_logs_${new Date().toISOString()}.json`;
+            a.click();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadLogs, 30000);
+
+        // Initial load
+        loadLogs();
+    </script>
+</body>
+</html>

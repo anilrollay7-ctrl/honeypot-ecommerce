@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honeypot Dashboard - SSH/Telnet Attack Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Honeypot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/dashboard" class="nav-item active">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/realtime" class="nav-item">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Real-time Feed</span>
+                </a>
+                <a href="/analysis" class="nav-item">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Threat Analysis</span>
+                </a>
+                <a href="/logs" class="nav-item">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Security Logs</span>
+                </a>
+                <a href="#" class="nav-item" data-page="sessions">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Sessions</span>
+                </a>
+                <a href="#" class="nav-item" data-page="auth">
+                    <i class="fas fa-key"></i>
+                    <span>Auth Attempts</span>
+                </a>
+                <a href="#" class="nav-item" data-page="commands">
+                    <i class="fas fa-terminal"></i>
+                    <span>Commands</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>System Active</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h1 id="page-title">Dashboard Overview</h1>
+                    <p id="page-subtitle">Real-time honeypot monitoring</p>
+                </div>
+                <div class="header-right">
+                    <div class="refresh-btn" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <div class="time-display" id="current-time"></div>
+                </div>
+            </header>
+
+            <!-- Dashboard Page -->
+            <div id="dashboard-page" class="page-content active">
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card gradient-blue">
+                        <div class="stat-icon">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-sessions">0</h3>
+                            <p>Total Sessions</p>
+                            <span class="stat-change" id="sessions-24h">+0 today</span>
+                        </div>
+                    </div>
+                    <div class="stat-card gradient-red">
+                        <div class="stat-icon">
+                            <i class="fas fa-user-lock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-auth">0</h3>
+                            <p>Auth Attempts</p>
+                            <span class="stat-change" id="auth-24h">+0 today</span>
+                        </div>
+                    </div>
+                    <div class="stat-card gradient-green">
+                        <div class="stat-icon">
+                            <i class="fas fa-terminal"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-commands">0</h3>
+                            <p>Commands Executed</p>
+                            <span class="stat-change" id="unique-ips">0 unique IPs</span>
+                        </div>
+                    </div>
+                    <div class="stat-card gradient-purple">
+                        <div class="stat-icon">
+                            <i class="fas fa-download"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-downloads">0</h3>
+                            <p>File Downloads</p>
+                            <span class="stat-change" id="success-rate">0% success rate</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>Attack Timeline (7 Days)</h3>
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Top Attackers</h3>
+                        <canvas id="attackersChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Data Tables Row -->
+                <div class="tables-row">
+                    <div class="table-card">
+                        <h3><i class="fas fa-user"></i> Top Usernames</h3>
+                        <div class="table-responsive">
+                            <table id="top-usernames-table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Attempts</th>
+                                        <th>Bar</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="table-card">
+                        <h3><i class="fas fa-lock"></i> Top Passwords</h3>
+                        <div class="table-responsive">
+                            <table id="top-passwords-table">
+                                <thead>
+                                    <tr>
+                                        <th>Password</th>
+                                        <th>Attempts</th>
+                                        <th>Bar</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sessions Page -->
+            <div id="sessions-page" class="page-content">
+                <div class="table-card full-width">
+                    <h3><i class="fas fa-network-wired"></i> Recent Sessions</h3>
+                    <div class="table-responsive">
+                        <table id="sessions-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>Port</th>
+                                    <th>Protocol</th>
+                                    <th>Session ID</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auth Attempts Page -->
+            <div id="auth-page" class="page-content">
+                <div class="table-card full-width">
+                    <h3><i class="fas fa-key"></i> Authentication Attempts</h3>
+                    <div class="table-responsive">
+                        <table id="auth-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>Username</th>
+                                    <th>Password</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commands Page -->
+            <div id="commands-page" class="page-content">
+                <div class="table-card full-width">
+                    <h3><i class="fas fa-terminal"></i> Command History</h3>
+                    <div class="table-responsive">
+                        <table id="commands-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>Command</th>
+                                    <th>Session</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Page -->
+            <div id="analytics-page" class="page-content">
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>Top Commands</h3>
+                        <canvas id="commandsChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Authentication Success Rate</h3>
+                        <canvas id="authRateChart"></canvas>
+                    </div>
+                </div>
+                <div class="table-card full-width">
+                    <h3><i class="fas fa-download"></i> File Downloads</h3>
+                    <div class="table-responsive">
+                        <table id="downloads-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>URL</th>
+                                    <th>SHA256</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

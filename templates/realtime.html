@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Feed - Honeypot Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(239, 68, 68, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            color: #ef4444;
+            font-weight: 600;
+            animation: pulse-glow 2s infinite;
+        }
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.2); }
+        }
+        .event-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .event-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .event-item.new {
+            border-left: 4px solid #ef4444;
+            animation: flash 1s ease;
+        }
+        @keyframes flash {
+            0%, 100% { background: var(--card-bg); }
+            50% { background: rgba(239, 68, 68, 0.1); }
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .event-type {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .type-session { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+        .type-auth { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .type-command { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Honeypot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/analysis" class="nav-item">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Analysis</span>
+                </a>
+                <a href="/logs" class="nav-item">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Security Logs</span>
+                </a>
+                <a href="/realtime" class="nav-item active">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Real-time Feed</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>Streaming Live</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h1>Real-time Event Feed</h1>
+                    <p>Live monitoring of all honeypot activities</p>
+                </div>
+                <div class="header-right">
+                    <div class="live-indicator">
+                        <span class="live-dot"></span>
+                        <span>LIVE</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Real-time Stats -->
+            <div class="stats-grid">
+                <div class="stat-card gradient-blue">
+                    <div class="stat-icon"><i class="fas fa-network-wired"></i></div>
+                    <div class="stat-info">
+                        <h3 id="realtime-sessions">0</h3>
+                        <p>Sessions (Last 5 min)</p>
+                        <span class="stat-change" id="session-trend">↑ Monitoring</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-red">
+                    <div class="stat-icon"><i class="fas fa-user-lock"></i></div>
+                    <div class="stat-info">
+                        <h3 id="realtime-auth">0</h3>
+                        <p>Auth Attempts (Last 5 min)</p>
+                        <span class="stat-change" id="auth-trend">↑ Monitoring</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-green">
+                    <div class="stat-icon"><i class="fas fa-terminal"></i></div>
+                    <div class="stat-info">
+                        <h3 id="realtime-commands">0</h3>
+                        <p>Commands (Last 5 min)</p>
+                        <span class="stat-change" id="command-trend">↑ Monitoring</span>
+                    </div>
+                </div>
+                <div class="stat-card gradient-purple">
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                    <div class="stat-info">
+                        <h3 id="last-event-time">Never</h3>
+                        <p>Last Event</p>
+                        <span class="stat-change">Live updates</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Event Feed -->
+            <div class="table-card full-width">
+                <h3>
+                    <i class="fas fa-stream"></i> Live Event Stream
+                    <span style="float: right; font-size: 0.875rem; color: var(--text-secondary);">
+                        <i class="fas fa-circle" style="color: #ef4444;"></i> Auto-updating
+                    </span>
+                </h3>
+                <div class="event-feed" id="event-feed"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let eventCount = 0;
+        const maxEvents = 50;
+
+        // Connect to Server-Sent Events
+        const eventSource = new EventSource('/api/stream/events');
+
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateRealtimeStats(data);
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('SSE Error:', error);
+        };
+
+        // Poll for latest events
+        async function fetchLatestEvents() {
+            try {
+                const [sessions, auth, commands] = await Promise.all([
+                    fetch('/api/sessions?limit=5').then(r => r.json()),
+                    fetch('/api/auth-attempts?limit=5').then(r => r.json()),
+                    fetch('/api/commands?limit=5').then(r => r.json())
+                ]);
+
+                displayEvents([
+                    ...sessions.map(s => ({...s, type: 'session'})),
+                    ...auth.map(a => ({...a, type: 'auth'})),
+                    ...commands.map(c => ({...c, type: 'command'}))
+                ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+            } catch (error) {
+                console.error('Error fetching events:', error);
+            }
+        }
+
+        function updateRealtimeStats(stats) {
+            document.getElementById('realtime-sessions').textContent = stats.sessions_24h || 0;
+            document.getElementById('realtime-auth').textContent = stats.auth_attempts_24h || 0;
+            document.getElementById('realtime-commands').textContent = stats.total_commands || 0;
+        }
+
+        function displayEvents(events) {
+            const feed = document.getElementById('event-feed');
+            const existingEvents = Array.from(feed.children);
+
+            events.slice(0, maxEvents).forEach((event, index) => {
+                const isNew = index < 5;
+                const eventHtml = `
+                    <div class="event-item ${isNew ? 'new' : ''}">
+                        <div class="event-header">
+                            <span class="event-type type-${event.type}">
+                                ${event.type.toUpperCase()}
+                            </span>
+                            <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                ${new Date(event.timestamp).toLocaleString()}
+                            </span>
+                        </div>
+                        <div style="color: var(--text-primary); font-size: 0.875rem;">
+                            ${formatEvent(event)}
+                        </div>
+                    </div>
+                `;
+
+                if (isNew && existingEvents.length > 0) {
+                    feed.insertAdjacentHTML('afterbegin', eventHtml);
+                } else if (existingEvents.length === 0) {
+                    feed.insertAdjacentHTML('beforeend', eventHtml);
+                }
+            });
+
+            // Keep only max events
+            while (feed.children.length > maxEvents) {
+                feed.removeChild(feed.lastChild);
+            }
+
+            // Update last event time
+            if (events.length > 0) {
+                const lastTime = new Date(events[0].timestamp);
+                const now = new Date();
+                const diff = Math.floor((now - lastTime) / 1000);
+                document.getElementById('last-event-time').textContent = 
+                    diff < 60 ? `${diff}s ago` : `${Math.floor(diff/60)}m ago`;
+            }
+        }
+
+        function formatEvent(event) {
+            switch(event.type) {
+                case 'session':
+                    return `<i class="fas fa-plug"></i> New connection from <code>${event.src_ip}</code> on port ${event.dst_port}`;
+                case 'auth':
+                    const icon = event.success ? '✓' : '✗';
+                    const status = event.success ? 'SUCCESS' : 'FAILED';
+                    return `${icon} Login ${status}: <code>${event.username}</code> / <code>${event.password}</code> from <code>${event.src_ip}</code>`;
+                case 'command':
+                    return `<i class="fas fa-terminal"></i> Command executed: <code>${event.input}</code> from <code>${event.src_ip}</code>`;
+                default:
+                    return JSON.stringify(event);
+            }
+        }
+
+        // Fetch events every 5 seconds
+        setInterval(fetchLatestEvents, 5000);
+
+        // Initial load
+        fetchLatestEvents();
+    </script>
+</body>
+</html>
