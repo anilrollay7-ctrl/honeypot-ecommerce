@@ -58,30 +58,14 @@ WORKDIR /app
 RUN mkdir -p static && cp -r frontend/dist/* static/
 
 # ========================================
-# CREATE STARTUP SCRIPT
-# ========================================
-RUN echo '#!/bin/bash\n\
-set -x\n\
-echo "==============================================="\n\
-echo "🍯 Starting Honeypot E-commerce System"\n\
-echo "==============================================="\n\
-echo "Python version: $(python3 --version)"\n\
-echo "Working directory: $(pwd)"\n\
-echo "Files in /app: $(ls -la /app)"\n\
-echo "PORT env: ${PORT}"\n\
-echo "MONGODB_URI env: ${MONGODB_URI}"\n\
-echo ""\n\
-echo "🛒 Starting Flask Application..."\n\
-cd /app\n\
-exec python3 -u app.py 2>&1\n\
-' > /start.sh && chmod +x /start.sh
-
-# ========================================
 # EXPOSE PORTS  
 # ========================================
 EXPOSE 2222 2223 5000
 
+# Set working directory
+WORKDIR /app
+
 # ========================================
-# START ALL SERVICES
+# START APPLICATION
 # ========================================
-CMD ["/bin/bash", "/start.sh"]
+CMD ["python3", "-u", "app.py"]
