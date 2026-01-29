@@ -296,6 +296,10 @@ class AdvancedSecurityLogger:
         """Check every incoming request for attacks"""
         ip = request.remote_addr
         
+        # Whitelist internal IPs (Render's internal network)
+        if ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('172.'):
+            return None
+        
         # Check if IP is blocked
         if self.is_ip_blocked(ip):
             return jsonify({'error': 'IP address blocked due to suspicious activity'}), 403
