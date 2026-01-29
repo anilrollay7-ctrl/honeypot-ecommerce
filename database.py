@@ -9,7 +9,13 @@ from config import Config
 class DatabaseHandler:
     def __init__(self):
         try:
-            self.client = MongoClient(Config.MONGODB_URI, serverSelectionTimeoutMS=5000)
+            # MongoDB connection with SSL/TLS configuration
+            self.client = MongoClient(
+                Config.MONGODB_URI, 
+                serverSelectionTimeoutMS=5000,
+                tls=True,
+                tlsAllowInvalidCertificates=False
+            )
             self.client.server_info()  # Test connection
             self.db = self.client[Config.MONGODB_DATABASE]
             
@@ -43,6 +49,25 @@ class DatabaseHandler:
             print(f"⚠ MongoDB not available: {e}")
             print("⚠ Running in demo mode without database")
             self.connected = False
+            self.db = None
+            
+            # Set all collections to None for demo mode
+            self.sessions = None
+            self.auth_attempts = None
+            self.commands = None
+            self.downloads = None
+            self.stats = None
+            self.brute_force_attacks = None
+            self.shell_interactions = None
+            self.malware_downloads = None
+            self.attack_patterns = None
+            self.threat_intelligence = None
+            self.blocked_ips = None
+            self.blocked_users = None
+            self.user_activities = None
+            self.failed_logins = None
+            self.successful_logins = None
+            self.web_attacks = None
     
     def _create_indexes(self):
         """Create database indexes for better performance"""

@@ -271,7 +271,8 @@ class AdvancedSecurityLogger:
             'data': self.safe_get_request_data()
         }
         
-        self.db.web_attacks.insert_one(attack_data)
+        if self.db.web_attacks:
+            self.db.web_attacks.insert_one(attack_data)
         print(f"🔴 ATTACK DETECTED: {attack_type} from {ip} - {description}")
     
     def safe_get_request_data(self):
