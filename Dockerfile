@@ -35,15 +35,10 @@ WORKDIR /app
 COPY app.py database.py ecommerce_api.py security_logger.py config.py advanced_security.py ./
 COPY templates/ ./templates/
 COPY cowrie_to_mongodb.py ./
+COPY requirements.txt ./
 
 # Install Python dependencies for Flask
-RUN pip3 install --no-cache-dir \
-    flask==3.0.0 \
-    flask-cors==4.0.0 \
-    flask-jwt-extended==4.6.0 \
-    pymongo==4.6.1 \
-    dnspython==2.4.2 \
-    python-dotenv==1.0.0
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy and build React frontend
 COPY frontend/package*.json ./frontend/
