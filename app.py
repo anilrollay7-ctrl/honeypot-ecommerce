@@ -11,7 +11,7 @@ print(f"PORT: {os.environ.get('PORT', 'Not set')}", flush=True)
 print(f"MONGODB_URI: {'Set' if os.environ.get('MONGODB_URI') else 'Not set'}", flush=True)
 print("=" * 50, flush=True)
 
-from flask import Flask, jsonify, render_template, request, Response, stream_with_context
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context, send_from_directory
 from flask_cors import CORS
 from database import DatabaseHandler
 from security_logger import security_logger
@@ -24,7 +24,10 @@ from bson import ObjectId
 from datetime import datetime
 import time
 
-app = Flask(__name__)
+# Configure Flask to serve React frontend from dist folder
+app = Flask(__name__, 
+            static_folder='frontend/dist/assets',
+            static_url_path='/assets')
 app.config.from_object(Config)
 CORS(app)
 print("✓ Flask app created", flush=True)
@@ -98,7 +101,12 @@ def security_check():
 
 @app.route('/')
 def index():
-    """Main Admin Dashboard - Primary security monitoring interface"""
+    """Ecommerce Website - Main landing page"""
+    return send_from_directory('frontend/dist', 'index.html')
+
+@app.route('/admin')
+def admin_dashboard():
+    """Admin Dashboard - Primary security monitoring interface"""
     return render_template('admin_dashboard.html')
 
 @app.route('/dashboard')
@@ -110,12 +118,6 @@ def dashboard():
 def honeypot_dashboard():
     """Honeypot monitoring dashboard"""
     return render_template('dashboard_honeypot.html')
-
-@app.route('/admin')
-def admin_redirect():
-    """Redirect /admin to main dashboard"""
-    from flask import redirect
-    return redirect('/')
 
 @app.route('/api/admin/stats')
 def admin_stats():
@@ -678,6 +680,21 @@ def get_dashboard_stats():
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Catch-all route for React Router - must be last
+@app.route('/<path:path>')
+def serve_react_app(path):
+    """Serve React app for all non-API routes (for client-side routing)"""
+    # Don't intercept API routes or admin routes
+    if path.startswith('api/') or path.startswith('admin'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    # Try to serve static files from frontend/dist
+    if os.path.exists(os.path.join('frontend/dist', path)):
+        return send_from_directory('frontend/dist', path)
+    
+    # For all other routes, serve index.html (React Router will handle it)
+    return send_from_directory('frontend/dist', 'index.html')
 
 if __name__ == '__main__':
     print(f"Starting Enhanced Honeypot Dashboard on {Config.DASHBOARD_HOST}:{Config.DASHBOARD_PORT}")
