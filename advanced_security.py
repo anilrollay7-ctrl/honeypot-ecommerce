@@ -53,31 +53,48 @@ class AdvancedSecurityLogger:
         """Check if user is currently blocked"""
         return username in blocked_users
     
-    def block_ip(self, ip, reason):
+    def block_ip(self, ip, reason, email=None):
         """Block an IP address"""
         blocked_ips.add(ip)
         
-        # Log to database
-        self.db.blocked_ips.insert_one({
-            'ip': ip,
-            'reason': reason,
-            'blocked_at': datetime.utcnow(),
-            'expires_at': datetime.utcnow() + timedelta(seconds=BLOCK_DURATION_SECONDS),
-            'status': 'active'
-        })
+        # Log to database with email
+        if self.db.blocked_ips is not None:
+            self.db.blocked_ips.insert_one({
+                'ip': ip,
+                'email': email,
+                'reason': reason,
+                'timestamp': datetime.utcnow(),
+                'blocked_at': datetime.utcnow(),
+                'expires_at': datetime.utcnow() + timedelta(seconds=BLOCK_DURATION_SECONDS),
+                'status': 'active'
+            })
         
-        print(f"🚫 BLOCKED IP: {ip} - Reason: {reason}")
+        # Add to threat intelligence
+        if self.db.threat_intelligence is not None:
+            self.db.threat_intelligence.insert_one({
+                'ip': ip,
+                'email': email,
+                'threat_type': 'blocked_ip',
+                'reason': reason,
+                'timestamp': datetime.utcnow(),
+                'severity': 'high',
+                'source': 'honeypot_detection'
+            })
+        
+        print(f"🚫 BLOCKED IP: {ip} ({email}) - Reason: {reason}")
     
-    def block_user(self, username, reason):
+    def block_user(self, email, reason):
         """Block a user account"""
-        blocked_users.add(username)
+        blocked_users.add(email)
         
         # Log to database
-        self.db.blocked_users.insert_one({
-            'username': username,
-            'reason': reason,
-            'blocked_at': datetime.utcnow(),
-            'expires_at': datetime.utcnow() + timedelta(seconds=BLOCK_DURATION_SECONDS),
+        if self.db.blocked_users is not None:
+            self.db.blocked_users.insert_one({
+                'email': email,
+                'reason': reason,
+                'timestamp': datetime.utcnow(),
+                'blocked_at': datetime.utcnow(),
+                'expires_at': datetime.utcnow() + timedelta(seconds=BLOCK_DURATION_SECONDS),
             'status': 'active'
         })
         
@@ -183,15 +200,15 @@ class AdvancedSecurityLogger:
     # ==========================================
     
     def log_user_activity(self, username, action, details=None):
-        """Log user activity after login"""
+        """Log user activity after login and update session last_activity"""
         ip = request.remote_addr
+        timestamp = datetime.utcnow()
         activity = {
-            'username': username,
+            'email': username,  # Changed from 'username' to 'email'
             'ip': ip,
             'action': action,
             'details': details,
-            'timestamp': datetime.utcnow(),
-            'user_agent': request.headers.get('User-Agent', 'Unknown'),
+            'timestamp': timestamp,
             'path': request.path,
             'method': request.method
         }
@@ -201,7 +218,26 @@ class AdvancedSecurityLogger:
         ip_activities[ip].append(activity)
         
         # Store in database
-        self.db.user_activities.insert_one(activity)
+        if self.db.user_activities is not None:
+            self.db.user_activities.insert_one(activity)
+        
+        # Update session last_activity time
+        if self.db.sessions is not None:
+            self.db.sessions.update_one(
+                {
+                    '$or': [
+                        {'email': username},
+                        {'username': username}
+                    ],
+                    'ip': ip,
+                    'status': 'active'
+                },
+                {
+                    '$set': {'last_activity': timestamp},
+                    '$push': {'actions': {'action': action, 'timestamp': timestamp}}
+                },
+                upsert=False
+            )
         
         # Check for suspicious rapid activity
         recent_activities = [a for a in user_activities[username] 
@@ -211,38 +247,123 @@ class AdvancedSecurityLogger:
             self.log_attack('suspicious_activity', f'User {username} performed {len(recent_activities)} actions in 1 minute', 'medium')
             self.block_user(username, f'Suspicious rapid activity: {len(recent_activities)} actions/minute')
     
-    def log_failed_login(self, username, ip):
+    def log_failed_login(self, username, ip, password=None):
         """Log failed login attempt and check for brute force"""
         timestamp = datetime.utcnow()
         
         # Track failed attempts
         ip_failed_attempts[ip].append(timestamp)
-        user_failed_attempts[username].append(timestamp)
+        user_failed_attempts[username].append({
+            'timestamp': timestamp,
+            'password': password,
+            'username': username
+        })
         
-        # Log to database
-        self.db.failed_logins.insert_one({
+        # Log to database - auth_attempts collection
+        attempt_data = {
+            'email': username,
             'username': username,
+            'password': password,
             'ip': ip,
             'timestamp': timestamp,
-            'user_agent': request.headers.get('User-Agent', 'Unknown')
-        })
+            'success': False,
+            'method': request.method,
+            'path': request.path,
+            'user_agent': username  # Store attempted username/email in user_agent field
+        }
+        
+        if self.db.auth_attempts is not None:
+            self.db.auth_attempts.insert_one(attempt_data)
+        
+        if self.db.failed_logins is not None:
+            self.db.failed_logins.insert_one(attempt_data)
         
         # Check if should block
         if self.check_failed_login_attempts(ip, is_ip=True):
-            self.block_ip(ip, f'Brute force attack: {len(ip_failed_attempts[ip])} failed attempts')
-            self.log_attack('brute_force', f'IP {ip} blocked after {len(ip_failed_attempts[ip])} failed login attempts', 'high')
+            self.block_ip(ip, f'Brute force attack: {len(ip_failed_attempts[ip])} failed attempts', email=username)
+            self.log_attack('brute_force', f'IP {ip} blocked after {len(ip_failed_attempts[ip])} failed login attempts', 'high', email=username)
+            
+            # Log brute force attack with all attempts
+            if self.db.brute_force_attacks is not None:
+                self.db.brute_force_attacks.insert_one({
+                    'ip': ip,
+                    'target_email': username,
+                    'attempts_count': len(ip_failed_attempts[ip]),
+                    'timestamp': timestamp,
+                    'blocked': True,
+                    'failed_attempts_timestamps': list(ip_failed_attempts[ip])
+                })
         
         if self.check_failed_login_attempts(username, is_ip=False):
             self.block_user(username, f'Brute force target: {len(user_failed_attempts[username])} failed attempts')
+            
+            # Add to threat intelligence
+            if self.db.threat_intelligence is not None:
+                self.db.threat_intelligence.insert_one({
+                    'email': username,
+                    'ip': ip,
+                    'threat_type': 'brute_force_target',
+                    'reason': f'{len(user_failed_attempts[username])} failed login attempts',
+                    'timestamp': timestamp,
+                    'severity': 'high',
+                    'source': 'honeypot_detection'
+                })
+            
+            # Get all attempted credentials
+            attempted_credentials = [
+                {
+                    'username': attempt['username'],
+                    'password': attempt['password'],
+                    'timestamp': attempt['timestamp']
+                }
+                for attempt in user_failed_attempts[username]
+            ]
+            
+            # Log brute force for this user email with all attempted passwords
+            if self.db.brute_force_attacks is not None:
+                self.db.brute_force_attacks.insert_one({
+                    'email': username,
+                    'ip': ip,
+                    'attempts_count': len(user_failed_attempts[username]),
+                    'timestamp': timestamp,
+                    'blocked': True,
+                    'attempted_credentials': attempted_credentials  # Store all username/password attempts
+                })
     
     def log_successful_login(self, username, ip):
         """Log successful login"""
-        self.db.successful_logins.insert_one({
+        timestamp = datetime.utcnow()
+        login_data = {
+            'email': username,
             'username': username,
             'ip': ip,
-            'timestamp': datetime.utcnow(),
-            'user_agent': request.headers.get('User-Agent', 'Unknown')
-        })
+            'timestamp': timestamp,
+            'success': True,
+            'method': request.method,
+            'path': request.path,
+            'user_agent': username  # Store username in user_agent field
+        }
+        
+        if self.db.successful_logins is not None:
+            self.db.successful_logins.insert_one(login_data)
+        
+        if self.db.auth_attempts is not None:
+            self.db.auth_attempts.insert_one(login_data)
+        
+        # Create a session for this login
+        if self.db.sessions is not None:
+            session_data = {
+                'email': username,
+                'username': username,
+                'ip': ip,
+                'start_time': timestamp,
+                'timestamp': timestamp,
+                'last_activity': timestamp,
+                'status': 'active',
+                'user_agent': username,  # Store username in user_agent field
+                'actions': []
+            }
+            self.db.sessions.insert_one(session_data)
         
         # Clear failed attempts for this user/IP
         if username in user_failed_attempts:
@@ -254,17 +375,18 @@ class AdvancedSecurityLogger:
     # ATTACK LOGGING
     # ==========================================
     
-    def log_attack(self, attack_type, description, severity='medium'):
+    def log_attack(self, attack_type, description, severity='medium', email=None):
         """Log detected attack to database"""
         ip = request.remote_addr
+        timestamp = datetime.utcnow()
         
         attack_data = {
-            'timestamp': datetime.utcnow(),
+            'timestamp': timestamp,
             'attack_type': attack_type,
             'ip': ip,
+            'email': email,
             'description': description,
             'severity': severity,
-            'user_agent': request.headers.get('User-Agent', 'Unknown'),
             'path': request.path,
             'method': request.method,
             'headers': dict(request.headers),
@@ -273,7 +395,23 @@ class AdvancedSecurityLogger:
         
         if self.db.web_attacks is not None:
             self.db.web_attacks.insert_one(attack_data)
-        print(f"🔴 ATTACK DETECTED: {attack_type} from {ip} - {description}")
+        
+        if self.db.attack_patterns is not None:
+            self.db.attack_patterns.insert_one(attack_data)
+        
+        # Add to threat intelligence for high severity attacks
+        if severity in ['high', 'critical'] and self.db.threat_intelligence is not None:
+            self.db.threat_intelligence.insert_one({
+                'ip': ip,
+                'email': email,
+                'threat_type': attack_type,
+                'reason': description,
+                'timestamp': timestamp,
+                'severity': severity,
+                'source': 'honeypot_detection'
+            })
+        
+        print(f"🔴 ATTACK DETECTED: {attack_type} from {ip} ({email}) - {description}")
     
     def safe_get_request_data(self):
         """Safely get request data"""
@@ -296,6 +434,14 @@ class AdvancedSecurityLogger:
         """Check every incoming request for attacks"""
         ip = request.remote_addr
         
+        # Try to get email from request data
+        email = None
+        try:
+            req_data = self.safe_get_request_data()
+            email = req_data.get('email') or req_data.get('username')
+        except:
+            pass
+        
         # Whitelist internal IPs (Render's internal network)
         if ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('172.'):
             return None
@@ -309,35 +455,30 @@ class AdvancedSecurityLogger:
                           if a['timestamp'] > datetime.utcnow() - timedelta(seconds=RATE_LIMIT_WINDOW)]
         
         if len(recent_requests) > MAX_REQUESTS_PER_MINUTE:
-            self.block_ip(ip, f'Rate limit exceeded: {len(recent_requests)} requests/minute')
+            self.block_ip(ip, f'Rate limit exceeded: {len(recent_requests)} requests/minute', email=email)
             return jsonify({'error': 'Rate limit exceeded'}), 429
-        
-        # Check user agent
-        user_agent = request.headers.get('User-Agent', '')
-        if self.is_suspicious_user_agent(user_agent):
-            self.log_attack('suspicious_user_agent', f'Suspicious user agent: {user_agent}', 'low')
         
         # Check for attacks in request data
         request_data = str(self.safe_get_request_data())
         
         if self.detect_sql_injection(request_data):
-            self.log_attack('sql_injection', f'SQL injection attempt detected', 'high')
-            self.block_ip(ip, 'SQL injection attempt')
+            self.log_attack('sql_injection', f'SQL injection attempt detected', 'high', email=email)
+            self.block_ip(ip, 'SQL injection attempt', email=email)
             return jsonify({'error': 'Invalid request'}), 400
         
         if self.detect_xss(request_data):
-            self.log_attack('xss', f'XSS attempt detected', 'high')
-            self.block_ip(ip, 'XSS attempt')
+            self.log_attack('xss', f'XSS attempt detected', 'high', email=email)
+            self.block_ip(ip, 'XSS attempt', email=email)
             return jsonify({'error': 'Invalid request'}), 400
         
         if self.detect_path_traversal(request_data):
-            self.log_attack('path_traversal', f'Path traversal attempt detected', 'high')
-            self.block_ip(ip, 'Path traversal attempt')
+            self.log_attack('path_traversal', f'Path traversal attempt detected', 'high', email=email)
+            self.block_ip(ip, 'Path traversal attempt', email=email)
             return jsonify({'error': 'Invalid request'}), 400
         
         if self.detect_command_injection(request_data):
-            self.log_attack('command_injection', f'Command injection attempt detected', 'critical')
-            self.block_ip(ip, 'Command injection attempt')
+            self.log_attack('command_injection', f'Command injection attempt detected', 'critical', email=email)
+            self.block_ip(ip, 'Command injection attempt', email=email)
             return jsonify({'error': 'Invalid request'}), 400
         
         # Log normal activity

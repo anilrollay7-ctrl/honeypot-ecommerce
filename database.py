@@ -19,19 +19,17 @@ class DatabaseHandler:
             self.client.server_info()  # Test connection
             self.db = self.client[Config.MONGODB_DATABASE]
             
-            # Cowrie honeypot collections
-            self.sessions = self.db[Config.COLLECTION_SESSIONS]
-            self.auth_attempts = self.db[Config.COLLECTION_AUTH_ATTEMPTS]
-            self.commands = self.db[Config.COLLECTION_COMMANDS]
-            self.downloads = self.db[Config.COLLECTION_DOWNLOADS]
-            self.stats = self.db[Config.COLLECTION_STATS]
-            
             # Attack analysis collections
             self.brute_force_attacks = self.db['brute_force_attacks']
-            self.shell_interactions = self.db['shell_interactions']
-            self.malware_downloads = self.db['malware_downloads']
             self.attack_patterns = self.db['attack_patterns']
             self.threat_intelligence = self.db['threat_intelligence']
+            self.sessions = self.db['sessions']
+            
+            # Cowrie honeypot collections (optional)
+            self.commands = self.db['commands']
+            self.downloads = self.db['downloads']
+            self.shell_interactions = self.db['shell_interactions']
+            self.malware_downloads = self.db['malware_downloads']
             
             # Advanced security collections
             self.blocked_ips = self.db['blocked_ips']
@@ -40,6 +38,7 @@ class DatabaseHandler:
             self.failed_logins = self.db['failed_logins']
             self.successful_logins = self.db['successful_logins']
             self.web_attacks = self.db['web_attacks']
+            self.auth_attempts = self.db['auth_attempts']
             
             self.connected = True
             # Create indexes
@@ -56,10 +55,9 @@ class DatabaseHandler:
             self.auth_attempts = None
             self.commands = None
             self.downloads = None
-            self.stats = None
-            self.brute_force_attacks = None
             self.shell_interactions = None
             self.malware_downloads = None
+            self.brute_force_attacks = None
             self.attack_patterns = None
             self.threat_intelligence = None
             self.blocked_ips = None

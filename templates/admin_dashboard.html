@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Monitoring Dashboard - Honeypot Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --info: #3b82f6;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            color: white;
+            padding: 2rem 1.5rem;
+            box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .logo i {
+            font-size: 2rem;
+            color: var(--primary);
+        }
+
+        .logo h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .nav-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 1rem;
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .nav-item i {
+            font-size: 1.25rem;
+            width: 24px;
+        }
+
+        .status-indicator {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .refresh-btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #4f46e5;
+            transform: translateY(-2px);
+        }
+
+        .time-display {
+            padding: 0.75rem 1.5rem;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-weight: 500;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .stat-card.danger { border-left-color: var(--danger); }
+        .stat-card.warning { border-left-color: var(--warning); }
+        .stat-card.success { border-left-color: var(--success); }
+        .stat-card.info { border-left-color: var(--info); }
+        .stat-card.primary { border-left-color: var(--primary); }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .stat-card.danger .stat-icon { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .stat-card.warning .stat-icon { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .stat-card.success .stat-icon { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .stat-card.info .stat-icon { background: rgba(59, 130, 246, 0.1); color: var(--info); }
+        .stat-card.primary .stat-icon { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        /* Sections */
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title i {
+            color: var(--primary);
+        }
+
+        /* Live Feed */
+        .live-feed {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .feed-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: start;
+            gap: 1rem;
+            transition: background 0.2s ease;
+        }
+
+        .feed-item:hover {
+            background: var(--light);
+        }
+
+        .feed-item:last-child {
+            border-bottom: none;
+        }
+
+        .feed-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .feed-icon.critical { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .feed-icon.warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .feed-icon.info { background: rgba(59, 130, 246, 0.1); color: var(--info); }
+
+        .feed-content {
+            flex: 1;
+        }
+
+        .feed-title {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.25rem;
+        }
+
+        .feed-details {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .feed-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table thead {
+            background: var(--light);
+        }
+
+        .data-table th {
+            padding: 0.875rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #64748b;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .data-table td {
+            padding: 0.875rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+
+        .data-table tbody tr:hover {
+            background: var(--light);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .badge.warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .badge.success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .badge.info { background: rgba(59, 130, 246, 0.1); color: var(--info); }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #94a3b8;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #94a3b8;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--light);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-halved"></i>
+                <h2>Security Hub</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="/" class="nav-item active">
+                    <i class="fas fa-gauge-high"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#failed-logins" class="nav-item" onclick="scrollToSection('failed-logins')">
+                    <i class="fas fa-user-lock"></i>
+                    <span>Failed Logins</span>
+                </a>
+                <a href="#brute-force" class="nav-item" onclick="scrollToSection('brute-force')">
+                    <i class="fas fa-hammer"></i>
+                    <span>Brute Force</span>
+                </a>
+                <a href="#blocked" class="nav-item" onclick="scrollToSection('blocked')">
+                    <i class="fas fa-ban"></i>
+                    <span>Blocked Items</span>
+                </a>
+                <a href="#sessions" class="nav-item" onclick="scrollToSection('sessions')">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Sessions</span>
+                </a>
+                <a href="#web-attacks" class="nav-item" onclick="scrollToSection('web-attacks')">
+                    <i class="fas fa-globe"></i>
+                    <span>Web Attacks</span>
+                </a>
+            </nav>
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                <span>System Monitoring</span>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1>Security Monitoring Dashboard</h1>
+                    <p style="color: #64748b;">Real-time threat detection and monitoring</p>
+                </div>
+                <div class="header-actions">
+                    <button class="refresh-btn" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh</span>
+                    </button>
+                    <div class="time-display" id="current-time"></div>
+                </div>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card danger">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Failed Logins</div>
+                            <div class="stat-value" id="stat-failed-logins">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-user-lock"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card warning">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Brute Force Attacks</div>
+                            <div class="stat-value" id="stat-brute-force">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-hammer"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card info">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Blocked IPs</div>
+                            <div class="stat-value" id="stat-blocked-ips">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-ban"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card success">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Active Sessions</div>
+                            <div class="stat-value" id="stat-sessions">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card primary">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Web Attacks</div>
+                            <div class="stat-value" id="stat-web-attacks">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card warning">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Auth Attempts</div>
+                            <div class="stat-value" id="stat-auth-attempts">0</div>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="fas fa-key"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Feed -->
+            <div class="section live-feed">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-rss"></i>
+                        Live Security Feed
+                    </div>
+                    <span class="badge success" id="feed-status">Live</span>
+                </div>
+                <div id="live-feed-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading live data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Failed Logins Section -->
+            <div class="section" id="failed-logins">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-user-lock"></i>
+                        Recent Failed Login Attempts
+                    </div>
+                </div>
+                <div id="failed-logins-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Brute Force Attacks Section -->
+            <div class="section" id="brute-force">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-hammer"></i>
+                        Brute Force Attacks
+                    </div>
+                </div>
+                <div id="brute-force-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blocked Items Section -->
+            <div class="section" id="blocked">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-ban"></i>
+                        Blocked IPs & Users
+                    </div>
+                </div>
+                <div id="blocked-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sessions Section -->
+            <div class="section" id="sessions">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-network-wired"></i>
+                        Active Sessions
+                    </div>
+                </div>
+                <div id="sessions-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Web Attacks Section -->
+            <div class="section" id="web-attacks">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-globe"></i>
+                        Web Attack Attempts
+                    </div>
+                </div>
+                <div id="web-attacks-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Update time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleString();
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Smooth scroll to section
+        function scrollToSection(id) {
+            event.preventDefault();
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/admin/stats');
+                const stats = await response.json();
+                
+                document.getElementById('stat-failed-logins').textContent = stats.failed_logins || 0;
+                document.getElementById('stat-brute-force').textContent = stats.brute_force_attacks || 0;
+                document.getElementById('stat-blocked-ips').textContent = stats.blocked_ips || 0;
+                document.getElementById('stat-sessions').textContent = stats.sessions || 0;
+                document.getElementById('stat-web-attacks').textContent = stats.web_attacks || 0;
+                document.getElementById('stat-auth-attempts').textContent = stats.auth_attempts || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load failed logins
+        async function loadFailedLogins() {
+            try {
+                const response = await fetch('/api/admin/failed_logins');
+                const logins = await response.json();
+                const container = document.getElementById('failed-logins-content');
+                
+                if (logins.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No failed login attempts</p></div>';
+                    return;
+                }
+                
+                let html = '<table class="data-table"><thead><tr><th>Time</th><th>Username/Email</th><th>IP Address</th><th>Attempted Login</th></tr></thead><tbody>';
+                logins.forEach(login => {
+                    const attemptedLogin = login.user_agent || login.username || login.email || 'Unknown';
+                    html += `<tr>
+                        <td>${formatTime(login.timestamp)}</td>
+                        <td><strong>${login.username || login.email || 'N/A'}</strong></td>
+                        <td>${login.ip_address || login.ip || 'N/A'}</td>
+                        <td><strong style="color: #ef4444;">${attemptedLogin}</strong></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading failed logins:', error);
+                document.getElementById('failed-logins-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+            }
+        }
+
+        // Load brute force attacks
+        async function loadBruteForce() {
+            try {
+                const response = await fetch('/api/admin/brute_force');
+                const attacks = await response.json();
+                const container = document.getElementById('brute-force-content');
+                
+                if (attacks.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-shield-alt"></i><p>No brute force attacks detected</p></div>';
+                    return;
+                }
+                
+                let html = '<table class="data-table"><thead><tr><th>Time</th><th>Source IP</th><th>Target Email</th><th>Attempts</th><th>Status</th></tr></thead><tbody>';
+                attacks.forEach(attack => {
+                    const targetEmail = attack.target_email || attack.email || attack.user_email || 'N/A';
+                    const statusBadge = attack.blocked ? 'danger' : 'warning';
+                    const statusText = attack.blocked ? 'Blocked' : 'In Progress';
+                    
+                    html += `<tr>
+                        <td>${formatTime(attack.timestamp)}</td>
+                        <td><strong>${attack.src_ip || attack.ip || 'N/A'}</strong></td>
+                        <td>${targetEmail}</td>
+                        <td><span class="badge danger">${attack.attempts_count || 0}</span></td>
+                        <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading brute force:', error);
+                document.getElementById('brute-force-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+            }
+        }
+
+        // Load blocked items
+        async function loadBlockedItems() {
+            try {
+                const response = await fetch('/api/admin/blocked_items');
+                const data = await response.json();
+                const container = document.getElementById('blocked-content');
+                
+                if (data.ips.length === 0 && data.users.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No blocked items</p></div>';
+                    return;
+                }
+                
+                let html = '<h4 style="margin-bottom: 1rem;">Blocked IPs</h4>';
+                if (data.ips.length > 0) {
+                    html += '<table class="data-table"><thead><tr><th>IP Address</th><th>Reason</th><th>Blocked At</th><th>Expires At</th><th>Status</th></tr></thead><tbody>';
+                    data.ips.forEach(ip => {
+                        const statusClass = ip.status === 'active' ? 'danger' : 'info';
+                        html += `<tr>
+                            <td><strong>${ip.ip_address || ip.ip || 'N/A'}</strong></td>
+                            <td style="max-width: 300px;">${ip.reason || 'Multiple failed attempts'}</td>
+                            <td>${formatTime(ip.blocked_at)}</td>
+                            <td>${formatTime(ip.expires_at)}</td>
+                            <td><span class="badge ${statusClass}">${ip.status || 'active'}</span></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                } else {
+                    html += '<p style="color: #94a3b8; margin-bottom: 2rem;">No blocked IPs</p>';
+                }
+                
+                html += '<h4 style="margin: 2rem 0 1rem 0;">Blocked Users</h4>';
+                if (data.users.length > 0) {
+                    html += '<table class="data-table"><thead><tr><th>Username/Email</th><th>Reason</th><th>Blocked At</th><th>Expires At</th><th>Status</th></tr></thead><tbody>';
+                    data.users.forEach(user => {
+                        const statusClass = user.status === 'active' ? 'danger' : 'info';
+                        html += `<tr>
+                            <td><strong>${user.username || user.email || 'N/A'}</strong></td>
+                            <td style="max-width: 300px;">${user.reason || 'Suspicious activity'}</td>
+                            <td>${formatTime(user.blocked_at)}</td>
+                            <td>${formatTime(user.expires_at)}</td>
+                            <td><span class="badge ${statusClass}">${user.status || 'active'}</span></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                } else {
+                    html += '<p style="color: #94a3b8;">No blocked users</p>';
+                }
+                
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading blocked items:', error);
+                document.getElementById('blocked-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+            }
+        }
+
+        // Load sessions
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/admin/sessions');
+                const sessions = await response.json();
+                const container = document.getElementById('sessions-content');
+                
+                if (sessions.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-network-wired"></i><p>No active sessions</p></div>';
+                    return;
+                }
+                
+                let html = '<table class="data-table"><thead><tr><th>Time</th><th>Source IP</th><th>Username</th><th>Protocol</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
+                sessions.forEach(session => {
+                    const duration = session.duration ? Math.floor(session.duration / 60) + ' min' : 'N/A';
+                    const statusClass = session.status === 'active' ? 'success' : 'info';
+                    const statusText = session.status === 'active' ? 'Active' : 'Inactive';
+                    html += `<tr>
+                        <td>${formatTime(session.timestamp || session.start_time)}</td>
+                        <td><strong>${session.src_ip || session.ip || 'N/A'}</strong></td>
+                        <td>${session.username || session.email || session.user || 'N/A'}</td>
+                        <td>${session.protocol || 'Web'}</td>
+                        <td>${duration}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                document.getElementById('sessions-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+            }
+        }
+
+        // Load web attacks
+        async function loadWebAttacks() {
+            try {
+                const response = await fetch('/api/admin/web_attacks');
+                const attacks = await response.json();
+                const container = document.getElementById('web-attacks-content');
+                
+                if (attacks.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-shield-alt"></i><p>No web attacks detected</p></div>';
+                    return;
+                }
+                
+                let html = '<table class="data-table"><thead><tr><th>Time</th><th>IP Address</th><th>Attack Type</th><th>Method</th><th>Path</th><th>Description</th><th>Severity</th></tr></thead><tbody>';
+                attacks.forEach(attack => {
+                    const severityClass = attack.severity === 'critical' ? 'danger' : attack.severity === 'high' ? 'warning' : 'info';
+                    const description = attack.description || 'N/A';
+                    html += `<tr>
+                        <td>${formatTime(attack.timestamp)}</td>
+                        <td><strong>${attack.ip_address || attack.ip || 'N/A'}</strong></td>
+                        <td style="text-transform: capitalize;">${(attack.attack_type || 'unknown').replace(/_/g, ' ')}</td>
+                        <td><span class="badge info">${attack.method || 'GET'}</span></td>
+                        <td style="font-size: 0.85em; max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="${attack.path || '/'}">${attack.path || attack.url || '/'}</td>
+                        <td style="font-size: 0.85em; max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="${description}">${description}</td>
+                        <td><span class="badge ${severityClass}">${attack.severity || 'medium'}</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading web attacks:', error);
+                document.getElementById('web-attacks-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+            }
+        }
+
+        // Load live feed
+        async function loadLiveFeed() {
+            try {
+                const [failedLogins, bruteForce, sessions] = await Promise.all([
+                    fetch('/api/admin/failed_logins').then(r => r.json()),
+                    fetch('/api/admin/brute_force').then(r => r.json()),
+                    fetch('/api/admin/sessions').then(r => r.json())
+                ]);
+
+                const container = document.getElementById('live-feed-content');
+                let allEvents = [];
+
+                // Add failed logins
+                failedLogins.slice(0, 5).forEach(login => {
+                    allEvents.push({
+                        time: new Date(login.timestamp),
+                        type: 'critical',
+                        icon: 'fa-user-lock',
+                        title: 'Failed Login Attempt',
+                        details: `User: ${login.username || login.email || 'Unknown'} • IP: ${login.ip_address || login.ip || 'N/A'}`
+                    });
+                });
+
+                // Add brute force
+                bruteForce.slice(0, 5).forEach(attack => {
+                    allEvents.push({
+                        time: new Date(attack.timestamp),
+                        type: 'warning',
+                        icon: 'fa-hammer',
+                        title: 'Brute Force Attack',
+                        details: `${attack.attempts_count || 0} attempts from ${attack.src_ip || attack.ip || 'Unknown'}`
+                    });
+                });
+
+                // Add sessions
+                sessions.slice(0, 3).forEach(session => {
+                    allEvents.push({
+                        time: new Date(session.timestamp),
+                        type: 'info',
+                        icon: 'fa-network-wired',
+                        title: 'New Session',
+                        details: `Connection from ${session.src_ip || session.ip || 'Unknown'}`
+                    });
+                });
+
+                // Sort by time
+                allEvents.sort((a, b) => b.time - a.time);
+
+                if (allEvents.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-bell-slash"></i><p>No recent activity</p></div>';
+                    return;
+                }
+
+                let html = '';
+                allEvents.slice(0, 10).forEach(event => {
+                    html += `
+                        <div class="feed-item">
+                            <div class="feed-icon ${event.type}">
+                                <i class="fas ${event.icon}"></i>
+                            </div>
+                            <div class="feed-content">
+                                <div class="feed-title">${event.title}</div>
+                                <div class="feed-details">${event.details}</div>
+                                <div class="feed-time">${formatTime(event.time)}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading live feed:', error);
+                document.getElementById('live-feed-content').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading feed</p></div>';
+            }
+        }
+
+        // Refresh all data
+        function refreshData() {
+            loadStats();
+            loadFailedLogins();
+            loadBruteForce();
+            loadBlockedItems();
+            loadSessions();
+            loadWebAttacks();
+            loadLiveFeed();
+        }
+
+        // Initial load
+        refreshData();
+
+        // Auto-refresh every 5 seconds
+        setInterval(refreshData, 5000);
+    </script>
+</body>
+</html>

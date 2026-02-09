@@ -44,17 +44,17 @@ PRODUCTS = [
     {"id": 12, "name": "RGB LED Strip 5m", "price": 29, "category": "accessories", "description": "Smart RGB LED strip with app control", "image": "https://images.unsplash.com/photo-1626378803689-c6451f5c4926?w=400", "rating": 4.2, "reviews": 891, "discount": 0, "inStock": True},
 ]
 
-def log_action(user_id, action_type, details):
+def log_action(user_email, action_type, details):
     """Log all user actions to MongoDB"""
     action = {
-        'user_id': user_id,
+        'user_email': user_email,
         'action_type': action_type,
         'details': details,
         'timestamp': datetime.utcnow().isoformat(),
-        'ip_address': request.remote_addr,
-        'user_agent': request.headers.get('User-Agent')
+        'ip_address': request.remote_addr
     }
-    db.insert_document(ACTIONS_COLLECTION, action)
+    if db.connected:
+        db.db[ACTIONS_COLLECTION].insert_one(action)
 
 def token_required(f):
     @wraps(f)
@@ -148,7 +148,7 @@ def login():
     if not user:
         log_action(None, 'login_failed', {'email': email, 'reason': 'user_not_found'})
         if advanced_security:
-            advanced_security.log_failed_login(email, ip)
+            advanced_security.log_failed_login(email, ip, password)
         return jsonify({'message': 'Invalid credentials'}), 401
     
     # Check password
@@ -156,7 +156,7 @@ def login():
     if user.get('password') != password_hash:
         log_action(None, 'login_failed', {'email': email, 'reason': 'wrong_password'})
         if advanced_security:
-            advanced_security.log_failed_login(email, ip)
+            advanced_security.log_failed_login(email, ip, password)
         return jsonify({'message': 'Invalid credentials'}), 401
     
     user_id = str(user.get('_id', email))

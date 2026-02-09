@@ -1,6 +1,16 @@
 """
 Enhanced Flask API with Real-time Updates and Analysis
 """
+import sys
+import os
+print("=" * 50, flush=True)
+print("STARTING APPLICATION", flush=True)
+print(f"Python version: {sys.version}", flush=True)
+print(f"Working directory: {os.getcwd()}", flush=True)
+print(f"PORT: {os.environ.get('PORT', 'Not set')}", flush=True)
+print(f"MONGODB_URI: {'Set' if os.environ.get('MONGODB_URI') else 'Not set'}", flush=True)
+print("=" * 50, flush=True)
+
 from flask import Flask, jsonify, render_template, request, Response, stream_with_context
 from flask_cors import CORS
 from database import DatabaseHandler
@@ -17,18 +27,23 @@ import time
 app = Flask(__name__)
 app.config.from_object(Config)
 CORS(app)
+print("✓ Flask app created", flush=True)
 
 # Register ecommerce blueprint
 app.register_blueprint(ecommerce)
+print("✓ Ecommerce blueprint registered", flush=True)
 
 db = DatabaseHandler()
+print("✓ Database handler initialized", flush=True)
 
 # Initialize advanced security system
 advanced_security = init_advanced_security(db)
+print("✓ Advanced security initialized", flush=True)
 
 # Connect advanced security to ecommerce API
 from ecommerce_api import set_advanced_security
 set_advanced_security(advanced_security)
+print("✓ Advanced security connected to ecommerce", flush=True)
 
 # ========================================
 # SYNTHETIC ATTACK SIMULATION DISABLED
@@ -49,6 +64,29 @@ class JSONEncoder(json.JSONEncoder):
 
 app.json_encoder = JSONEncoder
 
+# Helper function to convert MongoDB documents to JSON-safe format
+def mongo_to_dict(doc):
+    """Convert MongoDB document to JSON-safe dictionary"""
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [mongo_to_dict(item) for item in doc]
+    if isinstance(doc, dict):
+        result = {}
+        for key, value in doc.items():
+            if isinstance(value, ObjectId):
+                result[key] = str(value)
+            elif isinstance(value, datetime):
+                result[key] = value.isoformat()
+            elif isinstance(value, dict):
+                result[key] = mongo_to_dict(value)
+            elif isinstance(value, list):
+                result[key] = [mongo_to_dict(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+    return doc
+
 # Security middleware - check every request
 @app.before_request
 def security_check():
@@ -60,17 +98,182 @@ def security_check():
 
 @app.route('/')
 def index():
-    """Serve React e-commerce application or honeypot dashboard"""
-    import os
-    static_folder = os.path.join(app.root_path, 'static')
-    
-    # If React build exists, serve it
-    if os.path.exists(os.path.join(static_folder, 'index.html')):
-        from flask import send_from_directory
-        return send_from_directory(static_folder, 'index.html')
-    
-    # Otherwise serve honeypot dashboard
+    """Main Admin Dashboard - Primary security monitoring interface"""
+    return render_template('admin_dashboard.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """Original dashboard page"""
+    return render_template('dashboard.html')
+
+@app.route('/honeypot')
+def honeypot_dashboard():
+    """Honeypot monitoring dashboard"""
     return render_template('dashboard_honeypot.html')
+
+@app.route('/admin')
+def admin_redirect():
+    """Redirect /admin to main dashboard"""
+    from flask import redirect
+    return redirect('/')
+
+@app.route('/api/admin/stats')
+def admin_stats():
+    """Get stats for admin dashboard"""
+    try:
+        stats = {
+            'failed_logins': db.failed_logins.count_documents({}) if db.connected and db.failed_logins is not None else 0,
+            'successful_logins': db.successful_logins.count_documents({}) if db.connected and db.successful_logins is not None else 0,
+            'brute_force_attacks': db.brute_force_attacks.count_documents({}) if db.connected and db.brute_force_attacks is not None else 0,
+            'blocked_ips': db.blocked_ips.count_documents({}) if db.connected and db.blocked_ips is not None else 0,
+            'blocked_users': db.blocked_users.count_documents({}) if db.connected and db.blocked_users is not None else 0,
+            'web_attacks': db.web_attacks.count_documents({}) if db.connected and db.web_attacks is not None else 0,
+            'user_activities': db.user_activities.count_documents({}) if db.connected and db.user_activities is not None else 0,
+            'auth_attempts': db.auth_attempts.count_documents({}) if db.connected and db.auth_attempts is not None else 0,
+            'sessions': db.sessions.count_documents({}) if db.connected and db.sessions is not None else 0,
+            'threat_intelligence': db.threat_intelligence.count_documents({}) if db.connected and db.threat_intelligence is not None else 0,
+            'attack_patterns': db.attack_patterns.count_documents({}) if db.connected and db.attack_patterns is not None else 0
+        }
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error in stats: {e}")
+        return jsonify({
+            'failed_logins': 0,
+            'successful_logins': 0,
+            'brute_force_attacks': 0,
+            'blocked_ips': 0,
+            'blocked_users': 0,
+            'web_attacks': 0,
+            'user_activities': 0,
+            'auth_attempts': 0,
+            'sessions': 0,
+            'threat_intelligence': 0,
+            'attack_patterns': 0
+        }), 200
+
+@app.route('/api/admin/failed_logins')
+def admin_failed_logins():
+    """Get recent failed login attempts"""
+    try:
+        if not db.connected or db.failed_logins is None:
+            return jsonify([])
+        
+        logins = list(db.failed_logins.find().sort('timestamp', -1).limit(100))
+        return jsonify(mongo_to_dict(logins))
+    except Exception as e:
+        print(f"Error in failed_logins: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/brute_force')
+def admin_brute_force():
+    """Get brute force attacks with attempted credentials"""
+    try:
+        if not db.connected or db.brute_force_attacks is None:
+            return jsonify([])
+        
+        attacks = list(db.brute_force_attacks.find().sort('timestamp', -1).limit(50))
+        return jsonify(mongo_to_dict(attacks))
+    except Exception as e:
+        print(f"Error in brute_force: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/blocked_items')
+def admin_blocked_items():
+    """Get all blocked IPs and users"""
+    try:
+        if not db.connected:
+            return jsonify({'ips': [], 'users': []})
+        
+        blocked_ips = list(db.blocked_ips.find().sort('timestamp', -1).limit(100)) if db.blocked_ips is not None else []
+        blocked_users = list(db.blocked_users.find().sort('timestamp', -1).limit(100)) if db.blocked_users is not None else []
+        
+        return jsonify({
+            'ips': mongo_to_dict(blocked_ips),
+            'users': mongo_to_dict(blocked_users)
+        })
+    except Exception as e:
+        print(f"Error in blocked_items: {e}")
+        return jsonify({'ips': [], 'users': []})
+
+@app.route('/api/admin/sessions')
+def admin_sessions():
+    """Get recent sessions with active/inactive status based on last activity"""
+    try:
+        if not db.connected or db.sessions is None:
+            return jsonify([])
+        
+        from datetime import timedelta
+        sessions = list(db.sessions.find().sort('timestamp', -1).limit(50))
+        
+        # Update session status based on last_activity
+        # Session is active only if last activity was within last 30 minutes
+        now = datetime.utcnow()
+        for session in sessions:
+            last_activity = session.get('last_activity') or session.get('timestamp') or session.get('start_time')
+            if last_activity:
+                # Check if activity was in last 30 minutes
+                time_diff = now - last_activity
+                if time_diff > timedelta(minutes=30):
+                    session['status'] = 'inactive'
+                    session['duration'] = int((last_activity - (session.get('start_time') or session.get('timestamp'))).total_seconds()) if session.get('start_time') or session.get('timestamp') else 0
+                else:
+                    session['status'] = 'active'
+                    session['duration'] = int((now - (session.get('start_time') or session.get('timestamp'))).total_seconds()) if session.get('start_time') or session.get('timestamp') else 0
+            else:
+                session['status'] = 'inactive'
+        
+        return jsonify(mongo_to_dict(sessions))
+    except Exception as e:
+        print(f"Error in sessions: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/threat_intelligence')
+def admin_threat_intelligence():
+    """Get threat intelligence data"""
+    try:
+        if not db.connected or db.threat_intelligence is None:
+            return jsonify([])
+        threats = list(db.threat_intelligence.find().sort('timestamp', -1).limit(100))
+        return jsonify(mongo_to_dict(threats))
+    except Exception as e:
+        print(f"Error in threat_intelligence: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/attack_patterns')
+def admin_attack_patterns():
+    """Get attack patterns"""
+    try:
+        if not db.connected or db.attack_patterns is None:
+            return jsonify([])
+        patterns = list(db.attack_patterns.find().sort('timestamp', -1).limit(100))
+        return jsonify(mongo_to_dict(patterns))
+    except Exception as e:
+        print(f"Error in attack_patterns: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/auth_attempts')
+def admin_auth_attempts():
+    """Get all authentication attempts"""
+    try:
+        if not db.connected or db.auth_attempts is None:
+            return jsonify([])
+        attempts = list(db.auth_attempts.find().sort('timestamp', -1).limit(100))
+        return jsonify(mongo_to_dict(attempts))
+    except Exception as e:
+        print(f"Error in auth_attempts: {e}")
+        return jsonify([])
+
+@app.route('/api/admin/web_attacks')
+def admin_web_attacks():
+    """Get web attack attempts"""
+    try:
+        if not db.connected or db.web_attacks is None:
+            return jsonify([])
+        attacks = list(db.web_attacks.find().sort('timestamp', -1).limit(100))
+        return jsonify(mongo_to_dict(attacks))
+    except Exception as e:
+        print(f"Error in web_attacks: {e}")
+        return jsonify([])
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -87,11 +290,6 @@ def serve_static(path):
         return send_from_directory(static_folder, 'index.html')
     
     return "Not Found", 404
-
-@app.route('/dashboard')
-def dashboard():
-    """Original dashboard page"""
-    return render_template('dashboard.html')
 
 @app.route('/analysis')
 def analysis_page():

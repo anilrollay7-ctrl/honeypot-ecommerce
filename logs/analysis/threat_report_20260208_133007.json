@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-02-08T13:30:07.378060",
+  "period": {
+    "start": "all_time",
+    "end": "now"
+  },
+  "statistics": {
+    "total_events": 0,
+    "by_severity": {
+      "low": 0,
+      "medium": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "by_type": {},
+    "unique_ips": [],
+    "top_attackers": [],
+    "malicious_commands": [],
+    "downloaded_files": []
+  }
+}
