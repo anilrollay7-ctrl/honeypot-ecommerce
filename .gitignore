@@ -9,7 +9,8 @@ venv/
 ENV/
 build/
 develop-eggs/
-dist/
+# Don't ignore frontend/dist but ignore Python dist
+# dist/
 downloads/
 eggs/
 .eggs/
