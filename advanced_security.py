@@ -25,11 +25,13 @@ blocked_ips = set()  # Blocked IP addresses
 blocked_users = set()  # Blocked usernames
 user_activities = defaultdict(list)  # User -> [activities]
 ip_activities = defaultdict(list)  # IP -> [activities]
+blocked_users_per_ip = defaultdict(set)  # IP -> {blocked usernames} - track which users are blocked from each IP
 
 # ==========================================
 # CONFIGURATION
 # ==========================================
-MAX_FAILED_ATTEMPTS = 5  # Block after 5 failed logins
+MAX_FAILED_ATTEMPTS = 5  # Block user after 5 failed logins
+MAX_BLOCKED_USERS_PER_IP = 3  # Block IP after 3 different users from same IP are blocked
 BLOCK_DURATION_SECONDS = 3600  # Block for 1 hour
 SUSPICIOUS_ACTIVITY_COUNT = 10  # Flag after 10 rapid actions
 RATE_LIMIT_WINDOW = 60  # 1 minute window
@@ -47,6 +49,9 @@ class AdvancedSecurityLogger:
     
     def is_ip_blocked(self, ip):
         """Check if IP is currently blocked"""
+        # Whitelist localhost IPs for testing
+        if ip in ['127.0.0.1', 'localhost', '::1']:
+            return False
         return ip in blocked_ips
     
     def is_user_blocked(self, username):
@@ -83,29 +88,40 @@ class AdvancedSecurityLogger:
         
         print(f"🚫 BLOCKED IP: {ip} ({email}) - Reason: {reason}")
     
-    def block_user(self, email, reason):
-        """Block a user account"""
+    def block_user(self, email, reason, ip=None):
+        """Block a user account and check if IP should also be blocked"""
         blocked_users.add(email)
+        
+        # Track which users are blocked from this IP
+        if ip:
+            blocked_users_per_ip[ip].add(email)
+            print(f"🔒 IP {ip} now has {len(blocked_users_per_ip[ip])} blocked user(s): {blocked_users_per_ip[ip]}")
+            
+            # Check if we should block the IP (after 3 different users from same IP are blocked)
+            if len(blocked_users_per_ip[ip]) >= MAX_BLOCKED_USERS_PER_IP:
+                self.block_ip(ip, f'{len(blocked_users_per_ip[ip])} different users blocked from this IP', email=email)
+                print(f"🚨 IP {ip} BLOCKED after {len(blocked_users_per_ip[ip])} users were blocked from it")
         
         # Log to database
         if self.db.blocked_users is not None:
             self.db.blocked_users.insert_one({
                 'email': email,
                 'reason': reason,
-                'timestamp': datetime.utcnow(),
-                'blocked_at': datetime.utcnow(),
-                'expires_at': datetime.utcnow() + timedelta(seconds=BLOCK_DURATION_SECONDS),
-            'status': 'active'
-        })
+                'ip': ip,
+                'timestamp': datetime.now(),
+                'blocked_at': datetime.now(),
+                'expires_at': datetime.now() + timedelta(seconds=BLOCK_DURATION_SECONDS),
+                'status': 'active'
+            })
         
-        print(f"🚫 BLOCKED USER: {username} - Reason: {reason}")
+        print(f"🚫 BLOCKED USER: {email} from IP {ip} - Reason: {reason}")
     
     def check_failed_login_attempts(self, identifier, is_ip=True):
         """Check if IP/user has too many failed attempts"""
         attempts = ip_failed_attempts[identifier] if is_ip else user_failed_attempts[identifier]
         
         # Remove old attempts (older than 10 minutes)
-        cutoff_time = datetime.utcnow() - timedelta(minutes=10)
+        cutoff_time = datetime.now() - timedelta(minutes=10)
         attempts = [t for t in attempts if t > cutoff_time]
         
         if is_ip:
@@ -245,11 +261,11 @@ class AdvancedSecurityLogger:
         
         if len(recent_activities) > SUSPICIOUS_ACTIVITY_COUNT:
             self.log_attack('suspicious_activity', f'User {username} performed {len(recent_activities)} actions in 1 minute', 'medium')
-            self.block_user(username, f'Suspicious rapid activity: {len(recent_activities)} actions/minute')
+            self.block_user(username, f'Suspicious rapid activity: {len(recent_activities)} actions/minute', ip=ip)
     
     def log_failed_login(self, username, ip, password=None):
         """Log failed login attempt and check for brute force"""
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now()  # Use local time instead of UTC
         
         # Track failed attempts
         ip_failed_attempts[ip].append(timestamp)
@@ -278,10 +294,10 @@ class AdvancedSecurityLogger:
         if self.db.failed_logins is not None:
             self.db.failed_logins.insert_one(attempt_data)
         
-        # Check if should block
+        # Check if should block user (not IP yet)
         if self.check_failed_login_attempts(ip, is_ip=True):
-            self.block_ip(ip, f'Brute force attack: {len(ip_failed_attempts[ip])} failed attempts', email=username)
-            self.log_attack('brute_force', f'IP {ip} blocked after {len(ip_failed_attempts[ip])} failed login attempts', 'high', email=username)
+            # Don't block IP here anymore, just log the attempts
+            self.log_attack('brute_force', f'IP {ip} has {len(ip_failed_attempts[ip])} failed login attempts', 'high', email=username)
             
             # Log brute force attack with all attempts
             if self.db.brute_force_attacks is not None:
@@ -290,12 +306,13 @@ class AdvancedSecurityLogger:
                     'target_email': username,
                     'attempts_count': len(ip_failed_attempts[ip]),
                     'timestamp': timestamp,
-                    'blocked': True,
+                    'blocked': False,  # IP not blocked yet
                     'failed_attempts_timestamps': list(ip_failed_attempts[ip])
                 })
         
         if self.check_failed_login_attempts(username, is_ip=False):
-            self.block_user(username, f'Brute force target: {len(user_failed_attempts[username])} failed attempts')
+            # Block user and pass IP so we can track blocked users per IP
+            self.block_user(username, f'Brute force target: {len(user_failed_attempts[username])} failed attempts', ip=ip)
             
             # Add to threat intelligence
             if self.db.threat_intelligence is not None:

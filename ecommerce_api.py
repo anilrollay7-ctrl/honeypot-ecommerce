@@ -76,117 +76,129 @@ def token_required(f):
 # Auth routes
 @ecommerce.route('/auth/register', methods=['POST'])
 def register():
-    data = request.json
-    email = data.get('email')
-    
-    # Check if user exists in MongoDB
-    existing_user = db.find_document(USERS_COLLECTION, {'email': email})
-    if existing_user:
-        log_action(None, 'register_failed', {'email': email, 'reason': 'user_exists'})
-        return jsonify({'message': 'User already exists'}), 400
-    
-    # Create new user
-    user_doc = {
-        'name': data.get('name'),
-        'email': email,
-        'phone': data.get('phone', ''),
-        'password': hashlib.sha256(data.get('password', '').encode()).hexdigest(),
-        'address': {
-            'street': '',
-            'city': '',
-            'state': '',
-            'zip': '',
-            'country': ''
-        },
-        'created_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat()
-    }
-    
-    # Insert into MongoDB
-    result = db.insert_document(USERS_COLLECTION, user_doc)
-    user_id = str(result) if result else email
-    
-    # Log action
-    log_action(user_id, 'register', {'email': email, 'name': data.get('name')})
-    
-    # Generate JWT token
-    token = jwt.encode({
-        'user_id': user_id,
-        'email': email,
-        'exp': datetime.utcnow() + timedelta(days=30)
-    }, SECRET_KEY, algorithm='HS256')
-    
-    user_data = user_doc.copy()
-    del user_data['password']
-    user_data['id'] = user_id
-    
-    return jsonify({
-        'token': token,
-        'user': user_data
-    }), 201
+    try:
+        data = request.json
+        email = data.get('email')
+        
+        # Check if user exists in MongoDB
+        existing_user = db.find_document(USERS_COLLECTION, {'email': email})
+        if existing_user:
+            log_action(None, 'register_failed', {'email': email, 'reason': 'user_exists'})
+            return jsonify({'message': 'User already exists'}), 400
+        
+        # Create new user
+        user_doc = {
+            'name': data.get('name'),
+            'email': email,
+            'phone': data.get('phone', ''),
+            'password': hashlib.sha256(data.get('password', '').encode()).hexdigest(),
+            'address': {
+                'street': '',
+                'city': '',
+                'state': '',
+                'zip': '',
+                'country': ''
+            },
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        # Insert into MongoDB
+        result = db.insert_document(USERS_COLLECTION, user_doc)
+        user_id = str(result) if result else email
+        
+        # Log action
+        log_action(email, 'register', {'email': email, 'name': data.get('name')})
+        
+        # Generate JWT token
+        token = jwt.encode({
+            'user_id': user_id,
+            'email': email,
+            'exp': datetime.utcnow() + timedelta(days=30)
+        }, SECRET_KEY, algorithm='HS256')
+        
+        user_data = user_doc.copy()
+        del user_data['password']
+        user_data['id'] = user_id
+        
+        return jsonify({
+            'token': token,
+            'user': user_data
+        }), 201
+    except Exception as e:
+        print(f"Registration error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': f'Registration failed: {str(e)}'}), 500
 
 @ecommerce.route('/auth/login', methods=['POST'])
 def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-    ip = request.remote_addr
-    
-    # Check if user is blocked
-    if advanced_security and advanced_security.is_user_blocked(email):
-        log_action(None, 'login_blocked', {'email': email, 'reason': 'user_blocked'})
-        return jsonify({'message': 'Account blocked due to suspicious activity'}), 403
-    
-    # Check if IP is blocked
-    if advanced_security and advanced_security.is_ip_blocked(ip):
-        log_action(None, 'login_blocked', {'email': email, 'reason': 'ip_blocked'})
-        return jsonify({'message': 'Access denied'}), 403
-    
-    # Find user in MongoDB
-    user = db.find_document(USERS_COLLECTION, {'email': email})
-    
-    if not user:
-        log_action(None, 'login_failed', {'email': email, 'reason': 'user_not_found'})
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        ip = request.remote_addr
+        
+        # Check if user is blocked
+        if advanced_security and advanced_security.is_user_blocked(email):
+            log_action(None, 'login_blocked', {'email': email, 'reason': 'user_blocked'})
+            return jsonify({'message': 'Account blocked due to suspicious activity'}), 403
+        
+        # Check if IP is blocked
+        if advanced_security and advanced_security.is_ip_blocked(ip):
+            log_action(None, 'login_blocked', {'email': email, 'reason': 'ip_blocked'})
+            return jsonify({'message': 'Access denied'}), 403
+        
+        # Find user in MongoDB
+        user = db.find_document(USERS_COLLECTION, {'email': email})
+        
+        if not user:
+            log_action(None, 'login_failed', {'email': email, 'reason': 'user_not_found'})
+            if advanced_security:
+                advanced_security.log_failed_login(email, ip, password)
+            return jsonify({'message': 'Invalid credentials'}), 401
+        
+        # Check password
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        if user.get('password') != password_hash:
+            log_action(None, 'login_failed', {'email': email, 'reason': 'wrong_password'})
+            if advanced_security:
+                advanced_security.log_failed_login(email, ip, password)
+            return jsonify({'message': 'Invalid credentials'}), 401
+        
+        user_id = str(user.get('_id', email))
+        
+        # Log successful login
+        log_action(email, 'login', {'email': email})
         if advanced_security:
-            advanced_security.log_failed_login(email, ip, password)
-        return jsonify({'message': 'Invalid credentials'}), 401
-    
-    # Check password
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    if user.get('password') != password_hash:
-        log_action(None, 'login_failed', {'email': email, 'reason': 'wrong_password'})
-        if advanced_security:
-            advanced_security.log_failed_login(email, ip, password)
-        return jsonify({'message': 'Invalid credentials'}), 401
-    
-    user_id = str(user.get('_id', email))
-    
-    # Log successful login
-    log_action(user_id, 'login', {'email': email})
-    if advanced_security:
-        advanced_security.log_successful_login(email, ip)
-        advanced_security.log_user_activity(email, 'login', {'success': True})
-    
-    # Generate JWT token
-    token = jwt.encode({
-        'user_id': user_id,
-        'email': email,
-        'exp': datetime.utcnow() + timedelta(days=30)
-    }, SECRET_KEY, algorithm='HS256')
-    
-    user_data = {
-        'id': user_id,
-        'name': user.get('name'),
-        'email': user.get('email'),
-        'phone': user.get('phone', ''),
-        'address': user.get('address', {}),
-        'created_at': user.get('created_at')
-    }
-    
-    return jsonify({
-        'token': token,
-        'user': user_data
-    }), 200
+            advanced_security.log_successful_login(email, ip)
+            advanced_security.log_user_activity(email, 'login', {'success': True})
+        
+        # Generate JWT token
+        token = jwt.encode({
+            'user_id': user_id,
+            'email': email,
+            'exp': datetime.utcnow() + timedelta(days=30)
+        }, SECRET_KEY, algorithm='HS256')
+        
+        user_data = {
+            'id': user_id,
+            'name': user.get('name'),
+            'email': user.get('email'),
+            'phone': user.get('phone', ''),
+            'address': user.get('address', {}),
+            'created_at': user.get('created_at')
+        }
+        
+        return jsonify({
+            'token': token,
+            'user': user_data
+        }), 200
+    except Exception as e:
+        print(f"Login error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': f'Login failed: {str(e)}'}), 500
 
 @ecommerce.route('/auth/profile', methods=['GET'])
 @token_required
